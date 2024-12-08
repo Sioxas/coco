@@ -1,10 +1,11 @@
 import classNames from "classnames";
-import { defineComponent, RenderAble } from "./render";
+import { ComponentType, defineComponent, RenderAble } from "./render";
 import { createContext, use } from "./context";
 
-const ElementContext = createContext<HTMLElement[]>([]);
+const ElementContext = createContext<HTMLElement[] | null>(null);
 
 class BaseComponent<T extends keyof HTMLElementTagNameMap = any> implements RenderAble {
+  static type = ComponentType.CLASS;
   protected element: HTMLElementTagNameMap[T];
 
   constructor(tag: T, private renderChildren?: () => void) {
@@ -16,11 +17,13 @@ class BaseComponent<T extends keyof HTMLElementTagNameMap = any> implements Rend
     if (!current) {
       throw new Error('Component must in render function');
     }
-    const children: HTMLElement[] = [];
-    ElementContext(children, () => {
-      this.renderChildren?.();
-    });
-    this.element.replaceChildren(...children);
+    if (this.renderChildren) {
+      const children: HTMLElement[] = [];
+      ElementContext(children, () => {
+        this.renderChildren?.();
+      });
+      this.element.replaceChildren(...children);
+    }
     current.push(this.element);
   }
 
@@ -48,8 +51,6 @@ class BaseComponent<T extends keyof HTMLElementTagNameMap = any> implements Rend
     return this;
   }
 }
-
-
 
 export function renderRoot(root: HTMLElement, redner: () => void) {
   const children: HTMLElement[] = [];
@@ -113,7 +114,3 @@ export const Link = defineComponent(class LinkComponent extends BaseComponent<'a
     this.element.target = target;
   }
 });
-
-function Table<T>(dataSource: T[], defineColumns: () => void) {
-
-}

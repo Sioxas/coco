@@ -1,21 +1,15 @@
 export function createContext<T>(defaultValue: T) {
-  let currentValue = defaultValue;
-
-  const Context = (value: T, children: () => void) => {
-    const prevValue = currentValue;
-    currentValue = value;
+  const Context: ((value: T, children: () => void) => void) & { value?: T } = (value, children) => {
+    const prevValue = Context.value;
+    Context.value = value;
     try {
       children();
     } finally {
-      currentValue = prevValue;
+      Context.value = prevValue;
     }
   }
-
-  return Object.assign(Context, {
-    get value() {
-      return currentValue;
-    }
-  });
+  Context.value = defaultValue;
+  return Context as ((value: T, children: () => void) => void) & { value: T };
 }
 
 export interface UseAble<T> {

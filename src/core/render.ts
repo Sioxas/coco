@@ -1,25 +1,30 @@
 import { createContext, use } from "./context";
 
-enum ComponentStatus {
+export enum ComponentStatus {
   MOUNT = 1,
   UPDATE = 2,
   UNMOUNT = 3,
 }
 
-interface Hook<T = any> {
+export interface Hook<T = any> {
   value: T;
   next: Hook | null;
 }
 
-interface ComponentCtx {
+export interface ComponentCtx {
   hook: Hook | null;
   status: ComponentStatus;
   key?: number | string;
 }
 
-const ComponentContext = createContext<ComponentCtx>({ hook: null, status: ComponentStatus.MOUNT });
+export const ComponentContext = createContext<ComponentCtx>({ hook: null, status: ComponentStatus.MOUNT });
 
 let workInProgressHook: Hook | null = null;
+
+function renderWithHooks(render: () => void) {
+  workInProgressHook = null;
+  render();
+}
 
 export function useHook(): Hook {
   const ctx = use(ComponentContext);
@@ -43,21 +48,6 @@ export function useHook(): Hook {
     throw new Error("hook must be called in the body of a function component");
   }
   return workInProgressHook;
-}
-
-export function useState<T>(initialState: T | (() => T)): [T, (newState: T) => void] {
-  const hook = useHook();
-  if (!hook.value) {
-    hook.value = typeof initialState === "function" ? (initialState as () => T)() : initialState;
-  }
-  return [hook.value, (newState: T) => {
-    hook.value = newState;
-  }];
-}
-
-function renderWithHooks(render: () => void) {
-  workInProgressHook = null;
-  render();
 }
 
 export enum ComponentType {

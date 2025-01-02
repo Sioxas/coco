@@ -27,7 +27,7 @@ class Observable {
 }
 
 
-class State<T = unknown> extends Observable implements Signal<T> {
+export class SignalState<T = unknown> extends Observable implements Signal<T> {
   constructor(public value: T) {
     super();
   }
@@ -54,7 +54,7 @@ enum ComputedState {
   Computing,
   Checked,
 }
-class Computed<T = unknown> extends Observable implements Signal<T>, Subscriber {
+export class Computed<T = unknown> extends Observable implements Signal<T>, Subscriber {
   state = ComputedState.Dirty;
   value: T | undefined;
   constructor(private cb: () => T) {
@@ -62,17 +62,17 @@ class Computed<T = unknown> extends Observable implements Signal<T>, Subscriber 
     this.compute();
   }
 
-  deps: (State | Computed)[] = [];
-  computingDeps: (State | Computed)[] = [];
+  deps: (SignalState | Computed)[] = [];
+  computingDeps: (SignalState | Computed)[] = [];
 
-  addDep(dep: State | Computed) {
+  addDep(dep: SignalState | Computed) {
     if (this.computingDeps.indexOf(dep) === -1) {
       this.computingDeps.push(dep);
       // dep.subscribe(this);
     }
   }
 
-  notify(signal: State | Computed): void {
+  notify(signal: SignalState | Computed): void {
     if (!this.deps.includes(signal)) {
       console.warn('notifier is not in the deps', signal);
     }
@@ -145,15 +145,15 @@ class Watcher implements Subscriber {
   }
 }
 
-export function signal<T>(value: T): State<T> {
-  return new State(value);
+export function signal<T>(value: T): SignalState<T> {
+  return new SignalState(value);
 }
 
 export function computed<T>(cb: () => T): Computed<T> {
   return new Computed(cb);
 }
 
-export function watch(cb: () => void) {
+export function effect(cb: () => void) {
   const watcher = new Watcher(cb);
   return () => {
     watcher.unwatch();

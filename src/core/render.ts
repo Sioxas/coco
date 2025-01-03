@@ -15,15 +15,21 @@ export interface ComponentCtx {
   hook: Hook | null;
   status: ComponentStatus;
   key?: number | string;
+  dirty: boolean;
 }
 
-export const ComponentContext = createContext<ComponentCtx>({ hook: null, status: ComponentStatus.MOUNT });
+export const ComponentContext = createContext<ComponentCtx>({ hook: null, status: ComponentStatus.MOUNT, dirty: true });
 
 let workInProgressHook: Hook | null = null;
 
 function renderWithHooks(render: () => void) {
-  workInProgressHook = null;
-  render();
+  const ctx = use(ComponentContext);
+  let count = 0;
+  do {
+    workInProgressHook = null;
+    ctx.dirty = false;
+    render();
+  } while (ctx.dirty && ++count < 25);
 }
 
 export function useHook(): Hook {
@@ -68,7 +74,7 @@ type ComponentModifier<T> = T extends Object ? T & ComponentKeyModifier : Compon
 export function defineComponent<T extends RenderAble, Args extends any[] = never>(Component: { new(...args: Args): T }): ((...args: Args) => ComponentModifier<T>)
 export function defineComponent<T, Args extends any[] = never>(Component: (...args: Args) => T): ((...args: Args) => ComponentModifier<T>)
 export function defineComponent<T, Args extends any[] = never>(Component: any) {
-  const initialCtx: ComponentCtx = { hook: null, status: ComponentStatus.MOUNT };
+  const initialCtx: ComponentCtx = { hook: null, status: ComponentStatus.MOUNT, dirty: true };
   if (Component.type === ComponentType.CLASS) {
     return (...args: Args) => {
       const component = new Component(...args);

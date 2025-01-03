@@ -2,15 +2,19 @@ import { use } from "./context";
 import { ComponentContext, ComponentStatus, useHook } from "./render";
 import { Computed, computed, signal, SignalState } from "./signal";
 
-export function useState<T>(initialState: T | (() => T)): [T, (newState: T) => void] {
+export function useState<T>(initialState: T | (() => T)): [T, (newState: T | ((state: T) => T)) => void] {
   const ctx = use(ComponentContext);
   const hook = useHook();
   if (ctx.status === ComponentStatus.MOUNT) {
     hook.value = typeof initialState === "function" ? (initialState as () => T)() : initialState;
   }
-  const state = hook.value;
-  function setState(newState: T) {
-    hook.value = newState;
+  const state = hook.value as T;
+  function setState(newState: T | ((state: T) => T)) {
+    const value = typeof newState === "function" ? (newState as (state: T) => T)(state) : newState;
+    if (value !== state) {
+      hook.value = value;
+      ctx.dirty = true;
+    }
   }
   return [state, setState];
 }
@@ -33,33 +37,63 @@ export function useComputed<T>(cb: () => T) {
   return hook.value as Computed<T>;
 }
 
-function depsChanged(prevDeps: any[], deps: any[]) {
-  if (!prevDeps || !deps) {
-    return true;
+type Cleanup = void | (() => void);
+type EffectCallback = () => Cleanup;
+type DependencyList = ReadonlyArray<any>;
+
+function depsChanged(prevDeps: DependencyList, newDeps: DependencyList): boolean {
+  if (prevDeps.length !== newDeps.length) return true;
+  return prevDeps.some((dep, i) => !Object.is(dep, newDeps[i]));
+}
+
+export function useEffect(callback: EffectCallback, deps?: DependencyList) {
+  const ctx = use(ComponentContext);
+  const hook = useHook();
+
+  // Validate inputs
+  if (deps !== undefined && !Array.isArray(deps)) {
+    throw new Error('useEffect deps must be an array or undefined');
   }
-  if (prevDeps.length !== deps.length) {
-    return true;
+
+  // Handle mount
+  if (ctx.status === ComponentStatus.MOUNT) {
+    hook.value = {
+      cleanup: callback(),
+      deps: deps ?? [],
+    };
   }
-  return prevDeps.some((dep, index) => dep !== deps[index]);
+
+  // Handle updates
+  if (ctx.status === ComponentStatus.UPDATE) {
+    const prevDeps = hook.value.deps;
+    // Run effect if deps is undefined (no deps) or deps changed
+    if (!deps || depsChanged(prevDeps, deps)) {
+      if (typeof hook.value.cleanup === 'function') {
+        hook.value.cleanup();
+      }
+      hook.value = {
+        cleanup: callback(),
+        deps: deps ?? [],
+      };
+    }
+  }
+
+  // Handle unmount
+  if (ctx.status === ComponentStatus.UNMOUNT) {
+    if (typeof hook.value.cleanup === 'function') {
+      hook.value.cleanup();
+    }
+  }
 }
 
 export function useMemo<T>(cb: () => T, deps: any[]) {
-  const ctx = use(ComponentContext);
   const hook = useHook();
-  if (ctx.status === ComponentStatus.MOUNT) {
+  const prevDeps: any[] = hook.value.deps;
+  if (depsChanged(prevDeps, deps)) {
     hook.value = {
       state: cb(),
       deps: deps,
     };
-  }
-  if (ctx.status === ComponentStatus.UPDATE) {
-    const prevDeps: any[] = hook.value.deps;
-    if (depsChanged(prevDeps, deps)) {
-      hook.value = {
-        state: cb(),
-        deps: deps,
-      };
-    }
   }
   return hook.value.state as T;
 }
@@ -69,36 +103,5 @@ export function useCallback<T extends (...args: any[]) => any>(cb: T, deps: any[
 }
 
 export function useRef<T>(initialValue: T) {
-  const ctx = use(ComponentContext);
-  const hook = useHook();
-  if (ctx.status === ComponentStatus.MOUNT) {
-    hook.value = { current: initialValue };
-  }
-  return hook.value as { current: T };
-}
-
-export function useEffect(cb: () => (void | (() => void)), deps: any[]) {
-  const ctx = use(ComponentContext);
-  const hook = useHook();
-  if (ctx.status === ComponentStatus.MOUNT) {
-    hook.value = {
-      cleanup: cb(),
-      deps,
-    };
-  }
-  if (ctx.status === ComponentStatus.UPDATE) {
-    const prevDeps: any[] = hook.value.deps;
-    if (depsChanged(prevDeps, deps)) {
-      if (hook.value.cleanup) {
-        hook.value.cleanup?.();
-      }
-      hook.value = {
-        cleanup: cb(),
-        deps,
-      };
-    }
-  }
-  if (ctx.status === ComponentStatus.UNMOUNT) {
-    hook.value.cleanup?.();
-  }
+  return useMemo(() => ({ current: initialValue }), []);
 }
